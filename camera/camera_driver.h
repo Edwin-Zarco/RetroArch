@@ -65,7 +65,7 @@ extern const camera_driver_t *camera_drivers[];
 
 extern camera_driver_t camera_v4l2;
 extern camera_driver_t camera_pipewire;
-extern camera_driver_t camera_android;
+//extern camera_driver_t camera_android;
 extern camera_driver_t camera_rwebcam;
 extern camera_driver_t camera_avfoundation;
 extern camera_driver_t camera_ffmpeg;

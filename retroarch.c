@@ -360,7 +360,7 @@ static location_driver_t location_null = {
 };
 
 static const location_driver_t *location_drivers[] = {
-#ifdef ANDROID
+#if 0
    &location_android,
 #endif
 #ifdef HAVE_CORELOCATION

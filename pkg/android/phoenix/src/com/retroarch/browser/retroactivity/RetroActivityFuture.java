@@ -1,7 +1,7 @@
 package com.retroarch.browser.retroactivity;
 
 import android.util.Log;
-import android.view.PointerIcon;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.content.Intent;
@@ -17,7 +17,7 @@ import com.retroarch.browser.preferences.util.UserPreferences;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-public final class RetroActivityFuture extends RetroActivityCamera {
+public final class RetroActivityFuture extends RetroActivityCommon {
 
   // Tracks activity lifecycle state for MainMenuActivity resume detection
   public static volatile boolean isRunning = false;
@@ -49,8 +49,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         attemptTogglePointerCapture(state);
       } else if (msg.what == HANDLER_WHAT_TOGGLE_POINTER_NVIDIA) {
         attemptToggleNvidiaCursorVisibility(state);
-      } else if (msg.what == HANDLER_WHAT_TOGGLE_POINTER_ICON) {
-        attemptTogglePointerIcon(state);
       }
     }
   };
@@ -222,21 +220,19 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     }
   }
 
-  private void attemptTogglePointerIcon(boolean state) {
-    // Attempt setPointerIcon for Android 7.x (24, 25) only
-    // For Android 8.0+, requestPointerCapture is used
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-      try {
-        if (state) {
-          PointerIcon nullPointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL);
-          mDecorView.setPointerIcon(nullPointerIcon);
-        } else {
-          // Restore the pointer icon to it's default value
-          mDecorView.setPointerIcon(null);
-        }
-      } catch (Exception e) {
-        Log.w("[attemptTogglePointerIcon] exception thrown:", e.getMessage());
-      }
+  @Override
+  public void onBackPressed()
+  {
+    // ignore back, because the gamepad O button generates this
+  }
+
+  @Override
+  public boolean onKeyDown(int keyCode, KeyEvent event) {
+    boolean handled = super.onKeyDown(keyCode, event);
+    if (keyCode == KeyEvent.KEYCODE_MENU && event.isLongPress()) {
+      // prevent menu long-press from popping up soft keyboard
+      return true;
     }
+    return handled;
   }
 }

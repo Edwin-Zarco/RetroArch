@@ -64,6 +64,22 @@ enum {
     AINPUT_SOURCE_STYLUS = 0x00004000
 };
 #endif
+/* If using an SDK lower than 11 then add missing keyboard meta state flags.
+ * Values match android.view.KeyEvent.META_*. Defined as macros so this is
+ * harmless on newer SDKs where the enum already provides them. */
+#ifndef AMETA_META_ON
+#define AMETA_META_ON        0x00010000
+#endif
+#ifndef AMETA_CAPS_LOCK_ON
+#define AMETA_CAPS_LOCK_ON   0x00100000
+#endif
+#ifndef AMETA_NUM_LOCK_ON
+#define AMETA_NUM_LOCK_ON    0x00200000
+#endif
+#ifndef AMETA_SCROLL_LOCK_ON
+#define AMETA_SCROLL_LOCK_ON 0x00400000
+#endif
+
 /* If using an NDK lower than 16b then add missing definition */
 #ifndef __ANDROID_API_O_MR1__
 enum {

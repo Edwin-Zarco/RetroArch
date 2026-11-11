@@ -1061,15 +1061,15 @@ cleanup:
  */
 int mbedtls_mpi_add_int( mbedtls_mpi *X, const mbedtls_mpi *A, mbedtls_mpi_sint b )
 {
-    mbedtls_mpi _B;
+    mbedtls_mpi B_val;
     mbedtls_mpi_uint p[1];
 
     p[0] = ( b < 0 ) ? -b : b;
-    _B.s = ( b < 0 ) ? -1 : 1;
-    _B.n = 1;
-    _B.p = p;
+    B_val.s = ( b < 0 ) ? -1 : 1;
+    B_val.n = 1;
+    B_val.p = p;
 
-    return( mbedtls_mpi_add_mpi( X, A, &_B ) );
+    return( mbedtls_mpi_add_mpi( X, A, &B_val ) );
 }
 
 /*
@@ -1077,15 +1077,15 @@ int mbedtls_mpi_add_int( mbedtls_mpi *X, const mbedtls_mpi *A, mbedtls_mpi_sint 
  */
 int mbedtls_mpi_sub_int( mbedtls_mpi *X, const mbedtls_mpi *A, mbedtls_mpi_sint b )
 {
-    mbedtls_mpi _B;
+    mbedtls_mpi B_val;
     mbedtls_mpi_uint p[1];
 
     p[0] = ( b < 0 ) ? -b : b;
-    _B.s = ( b < 0 ) ? -1 : 1;
-    _B.n = 1;
-    _B.p = p;
+    B_val.s = ( b < 0 ) ? -1 : 1;
+    B_val.n = 1;
+    B_val.p = p;
 
-    return( mbedtls_mpi_sub_mpi( X, A, &_B ) );
+    return( mbedtls_mpi_sub_mpi( X, A, &B_val ) );
 }
 
 /*
@@ -1200,15 +1200,15 @@ cleanup:
  */
 int mbedtls_mpi_mul_int( mbedtls_mpi *X, const mbedtls_mpi *A, mbedtls_mpi_uint b )
 {
-    mbedtls_mpi _B;
+    mbedtls_mpi B_val;
     mbedtls_mpi_uint p[1];
 
-    _B.s = 1;
-    _B.n = 1;
-    _B.p = p;
+    B_val.s = 1;
+    B_val.n = 1;
+    B_val.p = p;
     p[0] = b;
 
-    return( mbedtls_mpi_mul_mpi( X, A, &_B ) );
+    return( mbedtls_mpi_mul_mpi( X, A, &B_val ) );
 }
 
 /*
@@ -1427,15 +1427,15 @@ cleanup:
  */
 int mbedtls_mpi_div_int( mbedtls_mpi *Q, mbedtls_mpi *R, const mbedtls_mpi *A, mbedtls_mpi_sint b )
 {
-    mbedtls_mpi _B;
+    mbedtls_mpi B_val;
     mbedtls_mpi_uint p[1];
 
     p[0] = ( b < 0 ) ? -b : b;
-    _B.s = ( b < 0 ) ? -1 : 1;
-    _B.n = 1;
-    _B.p = p;
+    B_val.s = ( b < 0 ) ? -1 : 1;
+    B_val.n = 1;
+    B_val.p = p;
 
-    return( mbedtls_mpi_div_mpi( Q, R, A, &_B ) );
+    return( mbedtls_mpi_div_mpi( Q, R, A, &B_val ) );
 }
 
 /*

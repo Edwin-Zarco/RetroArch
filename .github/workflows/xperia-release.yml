@@ -1,0 +1,146 @@
+name: Xperia Play release
+
+# Builds the Xperia Play port only when upstream RetroArch publishes a release.
+# Scheduled workflows run from the default branch, so this file must live on it.
+
+on:
+  schedule:
+    - cron: '17 5 * * *'          # daily poll; does nothing unless upstream has a new release
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Upstream tag to port (blank = latest upstream release)'
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: xperia-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.find.outputs.tag }}
+      needed: ${{ steps.find.outputs.needed }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG=$(gh api repos/libretro/RetroArch/releases/latest --jq .tag_name)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "xperia-$TAG" >/dev/null 2>&1; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "xperia-$TAG already exists, nothing to do"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.needed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0          # need the full history of main to find the port commits
+
+      - name: Rebase Xperia port onto upstream tag
+        id: rebase
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          set -e
+          git config user.name "xperia-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+
+          git remote add upstream https://github.com/libretro/RetroArch.git
+          git fetch --depth=1 upstream "+refs/tags/$TAG:refs/tags/$TAG"
+          git checkout -b "xperia-$TAG" "refs/tags/$TAG"
+
+          # Port commits = everything on main except the upstream import and CI commits.
+          COMMITS=$(git rev-list --reverse --no-merges --invert-grep \
+            --grep='^Import RetroArch' --grep='^CI:' origin/main)
+
+          if [ -n "$COMMITS" ]; then
+            if ! git cherry-pick $COMMITS; then
+              git cherry-pick --abort || true
+              TITLE="Xperia port failed to rebase onto $TAG"
+              if [ "$(gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq length)" = "0" ]; then
+                gh issue create --title "$TITLE" \
+                  --body "Cherry-picking the Xperia commits onto upstream $TAG hit conflicts. Resolve manually on a branch and re-run." || true
+              fi
+              exit 1
+            fi
+          fi
+
+          # Record exactly what this release changes relative to upstream
+          git diff "refs/tags/$TAG" HEAD > "$RUNNER_TEMP/xperia-$TAG.patch"
+          echo "PATCH_PATH=$RUNNER_TEMP/xperia-$TAG.patch" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - uses: android-actions/setup-android@v4
+
+      - name: Install SDK packages and NDK r14b
+        run: |
+          yes | sdkmanager "platforms;android-30" "build-tools;30.0.3"
+          curl -fsSL -o "$RUNNER_TEMP/ndk.zip" https://dl.google.com/android/repository/android-ndk-r14b-linux-x86_64.zip
+          unzip -q "$RUNNER_TEMP/ndk.zip" -d "$RUNNER_TEMP/ndk"
+          # build.gradle asks for ndkVersion 14.1.3816874, which Gradle looks up under $ANDROID_HOME/ndk/
+          mkdir -p "$ANDROID_HOME/ndk"
+          mv "$RUNNER_TEMP/ndk/android-ndk-r14b" "$ANDROID_HOME/ndk/14.1.3816874"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/14.1.3816874" >> "$GITHUB_ENV"
+
+      - name: Build APK (32-bit ARM flavor only)
+        working-directory: pkg/android/phoenix
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRa32Debug
+
+      - name: Name the APK
+        run: |
+          APK=$(find pkg/android/phoenix/build/outputs -name '*.apk' | head -n1)
+          test -n "$APK"
+          cp "$APK" "RetroArch-xperia-${{ needs.check.outputs.tag }}.apk"
+          echo "APK_PATH=RetroArch-xperia-${{ needs.check.outputs.tag }}.apk" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          gh release create "xperia-$TAG" "$APK_PATH" "$PATCH_PATH" \
+            --target main \
+            --title "Xperia Play port of $TAG" \
+            --notes "Port of upstream [$TAG](https://github.com/libretro/RetroArch/releases/tag/$TAG) to Xperia Play. Based on the backport by robinei: https://github.com/robinei/RetroArch. The attached .patch is the full set of changes applied on top of upstream $TAG."
+
+      - name: Report failure
+        if: failure() && steps.rebase.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          TITLE="Xperia build failed for $TAG"
+          if [ "$(gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq length)" = "0" ]; then
+            gh issue create --title "$TITLE" \
+              --body "Rebase succeeded but the build failed. See: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
+          fi

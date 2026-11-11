@@ -94,7 +94,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '8'
+          java-version: '17'      # sdkmanager (cmdline-tools) requires JDK 17+
 
       - uses: android-actions/setup-android@v4
 
@@ -107,6 +107,11 @@ jobs:
           mkdir -p "$ANDROID_HOME/ndk"
           mv "$RUNNER_TEMP/ndk/android-ndk-r14b" "$ANDROID_HOME/ndk/14.1.3816874"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/14.1.3816874" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '8'       # Gradle 6.7.1 can't run on JDK 17
 
       - name: Build APK (32-bit ARM flavor only)
         working-directory: pkg/android/phoenix

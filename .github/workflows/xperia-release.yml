@@ -68,12 +68,18 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
 
           git remote add upstream https://github.com/libretro/RetroArch.git
-          git fetch --depth=1 upstream "+refs/tags/$TAG:refs/tags/$TAG"
+          git fetch --depth=1 --no-tags upstream "+refs/tags/$TAG:refs/tags/$TAG"
           git checkout -b "xperia-$TAG" "refs/tags/$TAG"
 
-          # Port commits = everything on main except the upstream import and CI commits.
-          COMMITS=$(git rev-list --reverse --no-merges --invert-grep \
-            --grep='^Import RetroArch' --grep='^CI:' origin/main)
+          # Port commits = everything on main except the upstream import commit and
+          # commits that only touch .github/workflows (those are never ported).
+          COMMITS=""
+          for c in $(git rev-list --reverse --no-merges --invert-grep \
+              --grep='^Import RetroArch' origin/main); do
+            if git diff-tree --no-commit-id --name-only -r "$c" | grep -qv '^\.github/workflows/'; then
+              COMMITS="$COMMITS $c"
+            fi
+          done
 
           if [ -n "$COMMITS" ]; then
             if ! git cherry-pick $COMMITS; then

@@ -100,7 +100,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '17'      # sdkmanager (cmdline-tools) requires JDK 17+
+          java-version: '25'      # latest LTS; sdkmanager needs 17+, Gradle gets JDK 8 in the next step
 
       - uses: android-actions/setup-android@v4
 
@@ -119,11 +119,25 @@ jobs:
           distribution: temurin
           java-version: '8'       # Gradle 6.7.1 can't run on JDK 17
 
+      - name: Decode signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+        run: |
+          test -n "$KEYSTORE_B64" || { echo "RELEASE_KEYSTORE_B64 secret is missing"; exit 1; }
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
       - name: Build APK (32-bit ARM flavor only)
         working-directory: pkg/android/phoenix
+        env:
+          # Gradle reads ORG_GRADLE_PROJECT_<name> as project properties, which
+          # build.gradle uses for the release signingConfig. Keeps passwords off the command line.
+          ORG_GRADLE_PROJECT_RELEASE_STORE_FILE: ${{ runner.temp }}/release.keystore
+          ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRa32Debug
+          ./gradlew assembleRa32Release
 
       - name: Name the APK
         run: |

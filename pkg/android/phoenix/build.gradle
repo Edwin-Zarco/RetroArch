@@ -35,7 +35,9 @@ android {
     minSdkVersion 9
     externalNativeBuild {
       ndkBuild {
-        arguments "-j${Runtime.runtime.availableProcessors()}"
+        // Later command-line assignments win in make, so this overrides the
+        // NDK_DEBUG=1 that Gradle passes for debug builds (which compiles at -O0).
+        arguments "-j${Runtime.runtime.availableProcessors()}", "NDK_DEBUG=0"
       }
     }
     targetSdkVersion 28

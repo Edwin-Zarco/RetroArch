@@ -159,7 +159,13 @@ DEFINES += -DFLAC_PACKAGE_VERSION="\"retroarch\"" \
 	   -DHAVE_LROUND \
 	   -DFLAC__HAS_OGG=0
 
-LOCAL_CFLAGS   += -Wall -std=gnu99 -pthread -Wno-unused-function -fno-stack-protector -funroll-loops $(DEFINES)
+LOCAL_CFLAGS   += -Wall -pthread -Wno-unused-function -fno-stack-protector -funroll-loops $(DEFINES)
+# C-only: keeps g++ from warning that -std=gnu99 is not valid for C++
+LOCAL_CONLYFLAGS += -std=gnu99
+# Silence known false positives / dead-code noise from upstream sources on GCC 4.9
+# (-Wmissing-braces on "= {0}" initialisers, variables only used in disabled #ifdefs,
+# and an x86-only #pragma GCC target pair).
+LOCAL_CFLAGS   += -Wno-missing-braces -Wno-unused-variable -Wno-unused-but-set-variable -Wno-pragmas
 LOCAL_CPPFLAGS := -fexceptions -fpermissive -std=gnu++11 -fno-rtti -Wno-reorder $(DEFINES)
 
 # Let ndk-build set the optimization flags but remove -O3 like in cf3c3

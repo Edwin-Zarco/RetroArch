@@ -11,6 +11,10 @@ on:
       upstream_tag:
         description: 'Upstream tag to port (blank = latest upstream release)'
         required: false
+      force_rebuild:
+        description: 'Rebuild and replace the release even if it already exists'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -32,6 +36,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           INPUT_TAG: ${{ inputs.upstream_tag }}
+          FORCE: ${{ inputs.force_rebuild }}
         run: |
           if [ -n "$INPUT_TAG" ]; then
             TAG="$INPUT_TAG"
@@ -39,7 +44,7 @@ jobs:
             TAG=$(gh api repos/libretro/RetroArch/releases/latest --jq .tag_name)
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          if gh release view "xperia-$TAG" >/dev/null 2>&1; then
+          if gh release view "xperia-$TAG" >/dev/null 2>&1 && [ "$FORCE" != "true" ]; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
             echo "xperia-$TAG already exists, nothing to do"
           else
@@ -72,11 +77,11 @@ jobs:
           git checkout -b "xperia-$TAG" "refs/tags/$TAG"
 
           # Port commits = everything on main except the upstream import commit and
-          # commits that only touch .github/workflows (those are never ported).
+          # commits that only touch .github/ (workflows, dependabot config; never ported).
           COMMITS=""
           for c in $(git rev-list --reverse --no-merges --invert-grep \
               --grep='^Import RetroArch' origin/main); do
-            if git diff-tree --no-commit-id --name-only -r "$c" | grep -qv '^\.github/workflows/'; then
+            if git diff-tree --no-commit-id --name-only -r "$c" | grep -qv '^\.github/'; then
               COMMITS="$COMMITS $c"
             fi
           done
@@ -133,11 +138,24 @@ jobs:
           # build.gradle uses for the release signingConfig. Keeps passwords off the command line.
           ORG_GRADLE_PROJECT_RELEASE_STORE_FILE: ${{ runner.temp }}/release.keystore
           ORG_GRADLE_PROJECT_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_RELEASE_KEY_ALIAS: xperia   # not confidential; plain value avoids log masking
           ORG_GRADLE_PROJECT_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRa32Release
+
+      - name: Full lint (API-level compatibility report, never blocks the release)
+        continue-on-error: true
+        working-directory: pkg/android/phoenix
+        run: ./gradlew lintRa32Release
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lint-report-${{ needs.check.outputs.tag }}
+          path: pkg/android/phoenix/build/reports/lint-results*
+          if-no-files-found: ignore
 
       - name: Name the APK
         run: |
@@ -146,13 +164,25 @@ jobs:
           cp "$APK" "RetroArch-xperia-${{ needs.check.outputs.tag }}.apk"
           echo "APK_PATH=RetroArch-xperia-${{ needs.check.outputs.tag }}.apk" >> "$GITHUB_ENV"
 
+      - name: Verify APK signature and write checksum
+        run: |
+          # Fails the run (before anything is published) if the APK isn't validly signed.
+          # The printed certificate SHA-256 should be identical on every release.
+          "$ANDROID_HOME/build-tools/30.0.3/apksigner" verify --verbose --print-certs "$APK_PATH"
+          # zipalign -c exits non-zero if uncompressed entries aren't 4-byte aligned.
+          "$ANDROID_HOME/build-tools/30.0.3/zipalign" -c -v 4 "$APK_PATH" | tail -n 1
+          sha256sum "$APK_PATH" > "$APK_PATH.sha256"
+          echo "SHA_PATH=$APK_PATH.sha256" >> "$GITHUB_ENV"
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.check.outputs.tag }}
         run: |
-          gh release create "xperia-$TAG" "$APK_PATH" "$PATCH_PATH" \
+          # Replace an existing release (only reached when a rebuild was forced)
+          gh release delete "xperia-$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "xperia-$TAG" "$APK_PATH" "$SHA_PATH" "$PATCH_PATH" \
             --target main \
             --title "Xperia Play port of $TAG" \
             --notes "Port of upstream [$TAG](https://github.com/libretro/RetroArch/releases/tag/$TAG) to Xperia Play. Based on the backport by robinei: https://github.com/robinei/RetroArch. The attached .patch is the full set of changes applied on top of upstream $TAG."
